@@ -1,47 +1,42 @@
       subroutine Rd_Fault_Data (nFltTotal,nFlt0,
      1     cumWt_flt1, cumWt_param, cumWt_width, probAct,
      2     nParamVar, AttenType, cumwt_Ftype, 
-     3     nFtype, nWidth, nSegModel, f_start, f_num, faultFlag, al_Segwt )
-
+     3     nFtype, nWidth, nSegModel, f_start, f_num, faultFlag, al_Segwt,
+     4    fname )
+      
       include 'fract.h'
-      integer ndip(MAX_FLT), nWidth(MAX_FLT)
-      integer  nParamVar(MAX_FLT,MAX_WIDTH), nRT(MAXPARAM)
-      integer nMaxMag(MAX_FLT,MAXPARAM), nSlipRate(MAXPARAM), Attentype(MAX_FLT)
+      integer nWidth(MAX_FLT)
+      integer  nParamVar(MAX_FLT,MAX_WIDTH)
+      integer nMaxMag(MAX_FLT,MAXPARAM), Attentype(MAX_FLT)
       real segwt(MAX_FLT,MAX_FLT), wt, al_segWt(MAX_FLT)
-      real minmag, magstep, minDepth, coef_area(2), coef_width(2)
-      real sliprateWt(MAXPARAM,MAXPARAM),  bValueWt(MAXPARAM),
-     1     magRecurWt(MAXPARAM), faultWidthWt(MAXPARAM),
-     2     maxMagWt(MAXPARAM,MAXPARAM), rt_wt(10,10),
+      real minmag, magstep, minDepth
+      real bValueWt(MAXPARAM),
+     1     magRecurWt(MAXPARAM), 
      3     dipWt(MAXPARAM)
-      integer nFlt, nFlt0, nFlt1(1), nFlt2
+      integer nFlt0, nFlt2
       real cumWt_flt1(MAX_FLT,MAX_FLT),cumWt_param(MAX_FLT,MAX_WIDTH,MAXPARAM),
      1     cumWt_width(MAX_FLT,1),cumwt_Ftype(MAX_FLT,MAX_FTYPE)
-      real magRecur1(MAXPARAM)
       real x(MAXPARAM), x2(MAXPARAM,MAXPARAM)
-      real ProbAct(1), topdepth
-      character*80 fName1, fName
-      character*1 tempname
+      real ProbAct(1)
+      character*80 fName1, fName(MAX_FLT)
       integer nFm, nFtypeModels(MAX_FLT), nFtype1(MAX_FLT)
       real ftmodelwt(MAX_FLT), ftype1(MAX_FLT,MAX_FLT), Ftype_wt1(MAX_FLT,MAX_FLT)
       real rateType1(MAXPARAM), width_wt(MAX_FLT)
 
-      real rupLength_wt(MAX_N1), magApproach_wt(MAX_FLT)
-      real magLength_wt(MAX_N1), magArea_wt(MAX_N1)
-      integer iOverRide, nbvalue(MAX_FLT), nRecur(MAX_FLT), nThick1(MAX_FLT)
-      integer nMagLength, nMagArea
-      integer iOverRideMag, nruplength
+      integer nThick1(MAX_FLT)
+      integer iOverRideMag
 
       real magsyn, rupsyn, jbsyn, seismosyn, hyposyn, wtsyn
       integer directflag, synflag
 
       integer nSR, nActRAte, nRecInt, n_Dip(MAX_FLT)
-      real wt_srBranch, wt_ActBranch, wt_recIntBranch
-      real wt_SR(MAXPARAM), wt_ActRate(MAXPARAM), wt_RecInt(MAXPARAM)
+      real wt_srBranch, wt_recIntBranch
+      real wt_SR(MAXPARAM), wt_RecInt(MAXPARAM)
       real bValue2(MAXPARAM), actRate(MAXPARAM), actRateWt(MAXPARAM)
       real wt_MoRate(MAXPARAM), RateWt1(MAXPARAM), faultThickWt(MAX_WIDTH)
-      real refMagWt(MAX_Width,MAX_Width), MagDisp_Wt(MAX_FLT), Disp_Wt(MAX_FLT)
+      real refMagWt(MAX_Width,MAX_Width)
       integer nRefMag(MAX_WIDTH), nFtype(MAX_FLT)
-      real ftype(MAX_FLT,MAX_FLT), ftype_wt(MAX_FLT,MAX_FLT), SegWt1(MAX_FLT)
+      real ftype(MAX_FLT,MAX_FLT), ftype_wt(MAX_FLT,MAX_FLT)
       integer faultflag(MAX_FLT,MAX_SEG,MAX_FLT)
       integer f_start(1), f_num(1) , nSegModel(1)
 
@@ -89,7 +84,7 @@ C.......Loop over number of individual fault segments....
           call CheckDim ( iflt, MAX_FLT, 'MAX_FLT   ' )
 
 c         Read past name of this segment
-          read(10,'( a80)') fname
+          read(10,'( a80)') fname(iflt)
           read (10,*) isourceType, attenType(iFlt), sampleStep, directflag, synflag
 
 c         Read past the synchronous Rupture parameters

@@ -1,56 +1,37 @@
       program Fract_Haz45
-
-c     This program will compute the fractiles from a seismic hazard
-c     run. This version of the program works with the seismic hazard
-c     code version 43 or later. The fractiles are computed based on 
-c     a Monte Carlo simulation. This version will be able to read fault
-c     files in which synchronous rupture is modeled. 
  
-c     compatible with Haz43
-c     Last modified: 2/11
+c     compatible with Haz45j
+c     Last modified: 10/11/15
+
+      implicit none
 
       include 'fract.h'
-c      implicit none
       
-      real risk(MAX_INTEN,MAX_ATTEN, MAX_FLT, MAX_WIDTH, MAXPARAM,MAX_FTYPE), 
-     1     testInten(MAX_INTEN)
-      real al_segwt(MAX_FLT), cumwt_probact(2)
-      real risk_noMix(MAX_INTEN,MAX_ATTEN, MAX_FLT, MAX_WIDTH, MAXPARAM,MAX_FTYPE)
-       real probAct(MAX_FLT)
-c      real cum_wt(5)
-      integer nInten, jcalc(MAX_ATTENTYPE,MAX_ATTEN), nAtten(MAX_FLT), nsite, nFlt,
-     1        isite, iflt, 
-     1        iAtten, iInten, nWidth(MAX_FLT)
-      integer iParam, nParamVar(MAX_FLT,MAX_WIDTH)
-      integer  iFltWidth, iX(MAX_FILES)
-      character*80 filein, file1, fileinPSHA
-      integer nFlt1(MAX_FLT), nFlt2, attentype(MAX_FLT), nGM_model(MAX_ATTENTYPE)
-      real cumWt_segModel(MAX_FLT,MAX_FLT),
-     1     cumWt_param(MAX_FLT,MAX_WIDTH,MAXPARAM),
-     1     cumWt_Width(MAX_FLT,MAX_WIDTH), cumWt_Ftype(MAX_FLT,MAX_FTYPE)
-      real ran1, risk1(MAX_SAMPLE,MAX_INTEN)
-      real sortarray(MAX_SAMPLE), attenWt(MAX_PROB)
-      real cumWt_GM(MAX_ATTEN,MAX_ATTEN)
-      integer Fflag 
-      integer iperc, nfiles, n_Dip(MAX_FLT)
-      real perc(100,MAX_INTEN),mean(MAX_INTEN) 
-      integer nProb1(MAX_ATTENTYPE), jProb(MAX_PROB), kProb, nDip(MAX_FLT)
-      integer iseed, nSample, nFtype(MAX_FLT)
-      real timeDepfactor(10), timeDepwt(10), cumwt_TDF(10), cumwt_mix(2)
-      integer mcatten(MAX_SAMPLE), iMix(MAX_SAMPLE), c
-      integer f_start(MAX_FLT), f_num(MAX_FLT), nSegModel(MAX_FLT)
-      integer faultflag(MAX_FLT,MAX_SEG,MAX_FLT)
+      integer nFlt, iflt
+      integer nParamVar(MAX_FLT,MAX_WIDTH)
+      integer  nWidth(MAX_FLT)
+      character*80 filein, file1, fname(MAX_FLT), name1
+      real cumWt_param(MAX_FLT,MAX_WIDTH,MAXPARAM),
+     1     cumWt_Width(MAX_FLT,MAX_WIDTH)
+      real mag(MAX_FLT,MAXPARAM)
+      real ran1, N(MAX_SAMPLE,MAX_NMAG)
+      real sortarray(MAX_SAMPLE)
+      integer i, nMag(MAX_FLT)
+      real tempx
+      integer iSample, mcWidth, mcParam, iMag, iPerc, i1
+      integer nperc
+      real sum
 
-*** need to fix: treating all ftype as epistemic
-
-c      integer TreeIndex(MAX_FLT,MAX_DIP,MAX_WIDTH,MAX_N2,MAX_N2,MAX_N2,MAX_N2)      
-
-c      open (33,file='debug.out')
+      real perc(100,MAX_NMAG),mean(MAX_NMAG) 
+      integer iseed, nSample, j
+      real rate1(MAX_FLT,MAX_NMAG,MAXPARAM)
+      real perc1(9)
+      data perc1 / 0.01, 0.05, 0.1, 0.15, 0.50, 0.85, 0.90, 0.95, 0.99 /
     
       write (*,*) '*************************'
-      write (*,*) '* Fractile Code for use *'
-      write (*,*) '*  Hazard_v45.exe code  *'
-      write (*,*) '*    AUg, 2015, NAA     *'
+      write (*,*) '* SSC Mag Recur Fractile Code for use *'
+      write (*,*) '*  with Hazard_v45j code  *'
+      write (*,*) '*    Oct, 2015, NAA     *'
       write (*,*) '*************************'
 
       write (*,*) 'Enter the input filename.'
@@ -60,249 +41,162 @@ c      open (33,file='debug.out')
 
       read (31,*) iseed
       read (31,*) nSample
-      read (31,*) iPer
 
-      call CheckDim ( nSample, MAX_SAMPLE, 'MAX_SAMPLE ' )
+      name1 = 'MAX_SAMPLE '
+      call CheckDim ( nSample, MAX_SAMPLE, name1 )
 
-c     Read Input File
-      call RdInput ( nFlt, nFlt0, f_start, f_num, faultFlag, 
-     1     nInten,  testInten, lgTestInten, probAct, al_segWt, 
-     3     cumWt_SegModel, cumWt_Width, cumWt_param, cumWt_ftype, cumWt_GM, 
-     4     nSegModel,      nWidth,      nParamVar,   nFtype,      nGM_model, nattentype, attenType, nProb, iPer)
+c     Open output file
+      read (31,'( a80)') file1
+      open (30,file=file1,status='new')
+      write (30,'( i5, 2x,''number of sources'')') nFlt
 
+c     Initialize random number generator
+      do i=1,500
+        tempx = Ran1 (iseed)
+      enddo
+       
+      write (*,'( 2x,''reading SSC logic tree file (out2)'')')
+      call read_out2 ( nFlt, nWidth, nParamVar,nMag, rate1,
+     1         cumwt_param, cumwt_width, mag )
+      write (*,'( 2x,''out of read out2'')')
+      pause
+      
+c     Loop over each source (this treats each segment separately) 
+      do iFlt=1,nFlt
 
-c     Loop Over Number of Sites
-      nsite = 1
-      do 1000 iSite = 1, nSite
-
-c       Initialize risk1 and mean
+c       Initialize mag Recur for this fault
         do i=1,nSample
-          do j=1,MAX_INTEN
-            risk1(i,j) = 0.
+          do j=1,MAX_NMAG
+            N(i,j) = 0.
           enddo
         enddo
 
-c       Initialize mean
-        do i=1,MAX_INTEN
-          mean(i) = 0.
-        enddo
-
-c       Initialize random number generator
-        do i=1,500
-          tempx = Ran1 (iseed)
-        enddo
-       
-        write (*,'( 2x,''reading logictree file'')')
-        call read_logicRisk ( isite, nSite, nFlt, nfiles, ix, risk, nParamVar, natten, nFtype, iPer, nProb )
-
-       write (*,'( 2x,''out of logicrisk'')')
-
-c       Monte Carlo Sampling of Hazard
+c       Monte Carlo Sampling of Rates
         do iSample=1,nSample
 
-          nn100 = (iSample/100)*100
-          if ( nn100 .eq. iSample) then
-             write (*,*) 'Looping over samples:        ', iSample, ' of ', nSample
-          endif
+c         Select the fault width for this subsource 
+          call GetRandom1 ( iseed, nWidth(iFlt), cumWt_width, iflt, mcWidth, MAX_FLT )
 
-c         Sample the attenuation relation (correlated for all sources)
-          do jj=1,nAttenType
-           call GetRandom1 ( iseed, nGM_model(jj), cumWt_GM, jj, mcAtten(jj), MAX_ATTEN ) 
-          enddo
+c         Select the parameter variation for this subsource and fault width
+          call GetRandom2 (iseed, nParamVar(iFlt,mcWidth), 
+     1          cumWt_param, iFlt, mcWidth, mcParam, MAX_FLT, MAX_WIDTH)
 
-              
-c         Sample the hazard from each geometrically independent source region (or fault)
-c         (a source region may include multiple subsources) 
-          do iFlt0 = 1, nFlt0
-
-
-c           Select the seg model for this source region
-            call GetRandom1 ( iseed, nSegModel(iFlt0), cumWt_segModel, iflt0, mcSegModel, MAX_FLT )
-c           write (*,'( 3i5)') nSegModel(iFlt0), iflt0, mcSegModel
-
-            i1 = f_start(iFlt0)
-            i2 = f_start(iFlt0) + f_num(iFLt0) - 1
-
-            do iflt1=i1,i2
-
-c             set the attenuation type for this fault
-              jAttenType = attenType(iflt1)
-
-c             Reset the index to the faults in segment
-              jFlt = iFlt1-i1+1
-c              write (*,'( 2x''fltflag'', 10i5)') iFlt0, mcSegMOdel, jFlt, faultflag(iFlt0,mcSegModel,jFlt)
-
-c             Skip this fault if not included in this seg model
-              if (faultflag(iFlt0,mcSegModel,jFlt) .eq. 0. ) goto 50
-
-c *** fix this ***
-c              write (*,'( i5)') nFtype(iFlt1)
-c              write (*,'( 10f10.4)') (cumWt_Ftype(iflt1, ii),ii=1,nFtype(iFLt1) )
-c             Select the fault mechanism type 
-c              call GetRandom1b ( iseed, nFtype(iFlt1), cumWt_Ftype, iflt1, mcFTYPE, MAX_FTYPE, MAX_FLT )
-c   * not working, all set to 1 for now.
-               mcFType = 1
-
-c             Select the fault width for this subsource 
-              call GetRandom1 ( iseed, nWidth(iFlt1), cumWt_width, iflt1, mcWidth, MAX_FLT )
-
-c             Select the parameter variation for this subsource and fault width
-              call GetRandom2 (iseed, nParamVar(iFlt1,mcWidth), 
-     1          cumWt_param, iFlt1, mcWidth, mcParam, MAX_FLT, MAX_WIDTH)
-
-c              write (*,'( 6i5)') mcAtten(iSample), mcFtype, mcWidth, mcParam, nParamVar(iFlt1,mcWidth)
-
-c             Add the sampled hazard curve to the total hazard
-              do iInten=1,nInten
-                risk1(iSample,iInten) = risk1(iSample,iInten) 
-     1                    + risk(iInten,mcAtten(jAttenType),iFlt1,mcWidth,mcParam,mcFtype)
-     1                    * al_segwt(iflt1)
-                mean(iInten)=mean(iInten)
-     1	 	          + risk(iInten,mcAtten(jAttenType),iFlt1,mcWidth,mcParam,mcFtype)
-     1                    * al_segwt(iflt1)
-              enddo
-  50          continue
-
-c           end loop over faults in this flt system
-            enddo
-
-c         end loop over flt systems
+c         Cumpute the cumulative rate (N)
+c         (the rate1 is the incremental rate)
+          do iMag=nMag(iFlt),1,-1
+            if ( iMag .eq. nMag(iFlt)) then
+              N(iSample,iMag) = rate1(iFlt,mcWidth,mcParam)
+            else 
+              N(iSample,iMag) = N(iSample,iMag+1) + rate1(iFlt,mcWidth,mcParam)
+            endif
           enddo
 
 c       end loop over number of monte carlo samples
         enddo
 
-c       Compute mean hazard as check between fractile and haz code
-         do iInten = 1,nInten
-           mean(iInten) = mean(iInten)/nSample
+c       Compute mean N
+        do iMag = 1,nMag(iFlt)
+          sum = 0.
+          do iSample=1,nSample
+            sum = sum + N(iSample,iMag)
+          enddo
+          mean(iMag) = sum/nSample
         enddo
 
-c       Sort risk data so that cummulative empirical distribution function
+c       Sort N data so that cummulative distribution function
 c       can be computed  (sorts in place)
 c       sortarray is a working array
-        do iInten = 1,nInten
-           call sort(risk1(1,iInten),sortarray,nSample)
+        do iMag = 1,nMag(iFlt)
+          call sort(N(1,iMag),sortarray,nSample)
         enddo
 
-        nperc = 99
+        nperc = 9
 c       Compute fractile values
-        step = 1./(nperc+1)
-        do iInten=1,nInten
+c        step = 1./(nperc+1)
+        do iMag=1,nMag(iFlt)
           do iperc = 1,nPerc
-            i1 = int(iperc*step*nSample)
-  	    perc(iperc,iInten) = risk1(i1,iInten)
+            i1 = int( perc1(iPerc) * nSample )
+  	    perc(iperc,iMag) = N(i1,iMag)
           enddo
 	enddo
 
 c       Write output
-        read (31,'( a80)') file1
-        write(*,'( a32,a80)') 'Writing results to output file: ',file1
-
-        open (30,file=file1,status='new')
-        write(30,'(3x,25f12.4)') (testInten(J2),J2=1,nInten)
-
-        do i=1,nPerc
-          write (30,'(2x,f4.2,30e12.4)') i*step, (perc(i,k),k=1,nInten)
+        write (30,'( i5, 2x,a80)') iFlt, fname(iFlt)
+        write (30,'( 2x,''mag '', ''mean'',8x,'' 1%'',9x,'' 5%'',9x,''10%'',
+     1               9x,''15%'',9x,''50%'',9x,''85%'',9x,''90%'',9x,
+     2               ''95%'',9x,''99%'')')   
+        do iMag=1,nMag(iFlt)
+          write (30,'(2x,f4.2,10e12.4)') mag(iFlt,iMag), mean(iMag),
+     1       (perc(i,iMag),i=1,nperc)
         enddo
 
-        write(30,'(/,2x,a4,30e12.4)') 'mean', (mean(j),j=1,nInten)
-        close (30)
-
- 1000 continue
+      enddo
+c     end loop on flts
+      close (30)
 
       write (*,*) 
-      write (*,*) '*** Fractile Code (42) Completed with Normal Termination ***'
+      write (*,*) '*** SSC Fractile Code (42) Completed with Normal Termination ***'
 
       stop
       end
 
-c -------------------------------------------------------------------
+c -----------------------------------------------------------
 
-      subroutine read_logicRisk ( isite, nSite, nFlt, nfiles, ix, risk, nParamVar, nAtten, nFtype, iPer, nProb)
+      subroutine read_out2 ( nFlt, nWidth, nParamVar,nMag, rate1,
+     1         cumwt_param, cumwt_width, mag )
 
+      implicit none
       include 'fract.h'
 
-      real risk(MAX_INTEN, MAX_ATTEN, MAX_FLT, MAX_WIDTH, MAXPARAM,MAX_FTYPE)
-      real temp(MAX_INTEN)
-      integer isite, nInten, nFlt,  nSite, nAtten(1),ix(MAX_FILES), iProb,
-     1        nParamVar(MAX_FLT,MAX_WIDTH), nWidth(MAX_FLT), nfiles, ntotal
-      integer nFtype(MAX_FLT)
-      character*80 fName, file1
-      nwr = 12
-
-      nfiles = 1
-
-C     Loop over the number of files.
-      do 100 i1=1,nfiles
+      integer nFlt, nWidth(MAX_FLT), nMag(MAX_FLT), 
+     1        nParamVar(MAX_FLT,MAX_WIDTH)
+      integer nRD, iMag, iFlt, iFltWidth, j, jFlt, jFltWidth, k
+      character*80 fName, file1, dummy
+      real rate1(MAX_FLT, MAX_NMAG, MAX_WIDTH, MAXPARAM)
+      real wt(MAX_FLT,MAX_WIDTH,MAXPARAM)
+      real cumwt_param(MAX_FLT,MAX_WIDTH,MAXPARAM)
+      real wt_width(MAX_WIDTH)
+      real cumwt_width(MAX_FLT,MAX_WIDTH)
+      real mag(MAX_FLT,MAXPARAM), temp(MAXPARAM)
+      
+      nRD = 12
                      
 c     Open output file
       read (31,'( a80)') file1
 
       write (*,*) 'Opening output file from the hazard runs.'
       write (*,*) file1
-      open (nwr,file=file1,status='old')
-
-C      Loop over nSite taken out since each site is now given its own output file
-c           from the hazard code.
-c      do jSite=1,nSite
-            
-      do iFlt=1,nFlt      
-        
-        do jProb=1,nProb
-
-         read (nwr,*) jFlt, iProb, nAtten(iFlt), nWidth(iFlt), nFtype(iFlt), 
-     1         (nParamVar(iFlt,i),i=1,nWidth(iFlt)),
-     2         nInten
-
-c         write (*,'( 4i5,'' in read logic risk'')') jflt, iProb
-
-C     Check for Array Dimension of Risk Array.
-         if (nFlt .gt. MAX_FLT) then
-           write (*,*) 'MAX_FLT needs to be increased to ', nFlt
-           write (*,*) 'Change Array Parameter in FRACT.H and recompile.'
-           stop 99
-         endif
-         if (nWidth(iFlt) .gt. MAX_WIDTH) then
-           write (*,*) 'MAX_WIDTH needs to be increased to ', nWidth(iFlt)
-           write (*,*) 'Change Array Parameter in FRACT.H and recompile.'
-           stop 99
-         endif
-         if (iProb .gt. MAX_PROB) then
-           write (*,*) 'MAX_PROB needs to be increased to ', iProb
-           write (*,*) 'Change Array Parameter in FRACT.H and recompile.'
-           stop 99
-         endif
-         if (nFtype(iFlt) .gt. MAX_FTYPE) then
-           write (*,*) 'MAX_FTYPE needs to be increased to ', nFtype(iFlt)
-           write (*,*) 'Change Array Parameter in FRACT.H and recompile.'
-           stop 99
-         endif
-
-          do iAtten=1,nAtten(iFlt)
-            do iWidth=1,nWidth(iFlt)
-               do iFtype=1,nFtype(iFlt)
-                  do i=1,nParamVar(iFlt,iWidth)
- 	             read (nwr,*) (temp(j),j=1,nInten)
-
-c                    Only keep if it is the desired spectral period
-	             if ( iProb .eq. iPer) then
-                       do j=1,nInten
-	                 Risk(j,iAtten,iFlt,iWidth,i,iFtype) = temp(j)
-	               enddo
-                     endif
-                  enddo
-               enddo
-	    enddo
+      open (nRD,file=file1,status='old')
+      read (nRD,*) nFlt
+      read (nRD,*) (nWidth(k),k=1,nFlt)
+ 
+      do iFlt=1,nFlt
+        read (nRd,*) (wt_width(k),k=1,nWidth(iFlt))
+        do iFltWidth=1,nWidth(iFlt) 
+          read (nRD,*) nMag(iFlt), nParamVar(iFlt,iFltWidth)
+          read (nRD,*) (wt(iFlt,iFltWidth,j),j=1,nParamVar(iFlt,iFltWidth)) 
+          do iMag=1,nMag(iFlt)
+            read (nRD,*) jFlt, jFltWidth, mag(iFlt,imag),
+     1       (temp(j),j=1,nParamVar(iFlt,iFltWidth))
+            do j=1,nParamVar(iFlt,iFltWidth)
+              rate1(iFlt,iMag,iFltWidth,j) = temp(j)
+            enddo
           enddo
         enddo
       enddo
+      
+c     Compute cumulative wts
+      do iFlt=1,nFlt
+        do iFltWidth=1,nWidth(iFlt)
+          cumwt_param(iFlt,iFltWidth,1) = wt(iFlt,iFltWidth,1)
+          do j=2,nParamVar(iFlt,iFltWidth)
+            cumwt_param(iFlt,iFltWidth,j) = wt(iFlt,iFltWidth,j)+
+     1             cumwt_param(iFlt,iFltWidth,j-1)
+          enddo
+        enddo
+      enddo      
 
-c        if (jSite .eq. iSite ) then
-c          close ( nwr )
-c          return
-c        endif
-
-      close (nwr)
+      close (nRD)
 c      enddo
 
   100 continue
