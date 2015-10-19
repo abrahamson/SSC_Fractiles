@@ -53,10 +53,11 @@ c     Get random number
       end
       
 c ----------------------------
+
       subroutine GetRandom1b ( iseed, n, wt, i1, iSave, n1, n2 )
 
       integer iseed,i1,isave,n1,n, n2
-      real wt(n2, n1)
+      real wt(n1, n2)
       real x
 
 c     Get random number
