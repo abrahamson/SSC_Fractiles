@@ -107,9 +107,14 @@ c       Compute mean N
           sum = 0.
           do iSample=1,nSample
             sum = sum + N(iSample,iMag)
+            if ( N(iSample,iMag) .lt. 0. ) write (*,'( 2i5,e12.4)') iMag, iSample, n(iSample,iMag)
           enddo
           mean(iMag) = sum/nSample
+          if ( iFlt .eq. 119 ) then
+            write (*,'( i5,2e12.5)') iMag, sum, mean(iMag)
+          endif
         enddo
+        if ( iFlt .eq. 119 ) pause
 
 c       Sort N data so that cummulative distribution function
 c       can be computed  (sorts in place)
@@ -222,6 +227,10 @@ c -----------------------------------------------------------
           read (nRD,*) jFlt, jWidth, mag(imag),(temp(j),j=1,nParamVar(iWidth))
           do j=1,nParamVar(iWidth)
             rate1(iMag,iWidth,j) = temp(j)
+            if ( temp(j) .lt. 0. ) then
+              write (*,'( 4i5,e12.4)') iFlt, iWidth, iMag,j, temp(j)
+              pause
+            endif
           enddo
         enddo
       enddo
