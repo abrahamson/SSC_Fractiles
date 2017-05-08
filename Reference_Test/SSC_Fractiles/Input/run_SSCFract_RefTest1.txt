@@ -1,0 +1,7 @@
+5454                */ random Seed
+1000                */ number of samples
+SSCFract_RefTest1_Site1.out
+HazRefTest1_Site1.out2
+
+
+
